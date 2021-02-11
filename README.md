@@ -7,7 +7,7 @@ Given an RDKit molecule that does not sanitise, correct it until it does, regard
 
 Requires RDKit.
 
-    pip3 install molecular_rectifier
+    pip3 install molecular-rectifier
 
 ## Beyond RDKit Sanitisation
 
