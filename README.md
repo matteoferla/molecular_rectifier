@@ -3,6 +3,12 @@ Given an RDKit molecule that does not sanitise, correct it until it does, regard
 
 ![horror](horror.png)
 
+## Install
+
+Requires RDKit.
+
+    pip3 install molecular_rectifier
+
 ## Beyond RDKit Sanitisation
 
 The command `rdkit.Chem.SanitizeMol` fixes minor issues with the molecule.
