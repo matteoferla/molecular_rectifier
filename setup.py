@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from warnings import warn
 from importlib import util
 import sys
@@ -17,8 +17,8 @@ if not util.find_spec('rdkit'):
 
 setup(
     name='molecular_rectifier',
-    version='0.1',
-    packages=['molecular_rectifier'],
+    version='0.1.1',
+    packages=find_packages(),
     url='https://github.com/matteoferla/molecular_rectifier',
     license='MIT',
     author='Matteo Ferla',
