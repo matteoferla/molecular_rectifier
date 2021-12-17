@@ -46,7 +46,7 @@ class _RectifierRing(_RectifierBase):
             self._prevent_conjoined_ring()
         self.modifications.append(self.mol)
 
-    def _prevent_weird_rings(self):
+    def _prevent_weird_rings(self, iteration=0):
         ringatoms = self._get_ring_info()  # GetRingInfo().AtomRings()
         for ring_A, ring_B in itertools.combinations(ringatoms, r=2):
             shared = set(ring_A).intersection(set(ring_B))
@@ -97,7 +97,10 @@ class _RectifierRing(_RectifierBase):
                 self.log.warning(f'This molecule ({self.name}) has a bridge that will be removed')
                 self._prevent_bridge_ring(ring_A)
                 # start from scratch.
-                self._prevent_weird_rings()
+                if iteration < 3:
+                    self._prevent_weird_rings(iteration=iteration+1)
+                else:
+                    self.log.warning(f'Too many trials to remove bridge.')
         self.modifications.append(self.mol)
 
     # ===== Dep of prevent weird rings =================================================================================

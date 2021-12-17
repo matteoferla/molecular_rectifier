@@ -22,10 +22,11 @@ with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     __doc__ = f.read()
 descr = __doc__.split('\n')[1] # non-title line.
 
+# ------------ Setup ---------------------------------------------------------------------------------------------------
 
 setup(
     name='molecular_rectifier',
-    version='0.1.1',
+    version='0.1.2',
     python_requires='>3.6',
     packages=find_packages(),
     url='https://github.com/matteoferla/molecular_rectifier',
