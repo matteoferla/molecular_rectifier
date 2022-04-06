@@ -347,7 +347,7 @@ class _RectifierValence(_RectifierBase):
         :param atom:
         :return:
         """
-        self.log.warning(f'In molecule ({self.name}) reaking bond to atom {atom.GetIdx()}')
+        self.log.warning(f'In molecule ({self.name}) breaking bond to atom {atom.GetIdx()}')
         ring_indices = [a for ring in self._get_ring_info() for a in ring]
         for neigh in atom.GetNeighbors():
             if neigh.GetIdx() in ring_indices or neigh.GetSymbol() == '*':
