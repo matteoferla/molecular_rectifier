@@ -1,6 +1,6 @@
 import unittest, os
 from molecular_rectifier import Rectifier
-from rdkit import Chem
+from rdkit import Chem, Geometry
 from rdkit.Chem import AllChem
 
 class RectifierTester(unittest.TestCase):
@@ -45,6 +45,7 @@ class RectifierTester(unittest.TestCase):
         mol = Chem.MolFromSmiles(after)
         mol.SetProp('_Name', name)
         mol.GetBondBetweenAtoms(0, 1).SetBondType(Chem.BondType.SINGLE)
+        AllChem.EmbedMolecule(mol)
         before = Chem.MolToSmiles(mol)
         recto = Rectifier(mol).fix()
         gotten = Chem.MolToSmiles(recto.mol)
@@ -59,6 +60,16 @@ class RectifierTester(unittest.TestCase):
         mol.GetBondBetweenAtoms(0, 1).SetBondType(Chem.BondType.SINGLE)
         mol.GetBondBetweenAtoms(6, 7).SetBondType(Chem.BondType.AROMATIC)
         before = Chem.MolToSmiles(mol)
+        AllChem.EmbedMolecule(mol)
         recto = Rectifier(mol).fix()
         gotten = Chem.MolToSmiles(recto.mol)
         self.assertEqual(gotten, after, f'{name} failed {gotten} (expected {after})')
+
+    def test_emergency_overclose(self):
+        mol: Chem.Mol = Chem.MolFromSmiles('CC(C)(C)')
+        conf = Chem.Conformer()
+        for i in range(4):
+            conf.SetAtomPosition(i, Geometry.Point3D(i/4, 0, 0))
+        mol.AddConformer(conf)
+        recto = Rectifier(mol).fix()
+        self.assertEqual(recto.mol.GetNumAtoms(), 1)

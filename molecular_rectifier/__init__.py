@@ -19,10 +19,11 @@ from ._base import _RectifierBase  # provides the __init__ and shared methods
 from ._ring import _RectifierRing  # fixes rings
 from ._odd import _RectifierOdd  # fixes specific oddities
 from ._valence import _RectifierValence  # fixes valence
+from ._overclose import _RectifierOverclose  # fixes extreme overlaps
 from rdkit import Chem
 
 
-class Rectifier(_RectifierRing, _RectifierOdd, _RectifierValence):
+class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierValence):
     """
     Fixes the nastiness.
 
@@ -41,6 +42,7 @@ class Rectifier(_RectifierRing, _RectifierOdd, _RectifierValence):
     """
 
     def fix(self) -> Rectifier:
+        self.absorb_overclose()  # from _RectifierOverclose
         self.fix_rings()  # from _RectifierRing
         self.prevent_oddities()  # from _RectifierOdd
         self.ununspecified_bonds()  # from _RectifierValence

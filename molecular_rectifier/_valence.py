@@ -163,18 +163,6 @@ class _RectifierValence(_RectifierBase):
             d = pt.GetDefaultValence(atom.GetAtomicNum())
             return valence - d
 
-    def _get_atom_valence(self, atom: Chem.Atom):
-        """
-        Cannot get the normal way as it cannot be sanitised.
-
-        :param atom:
-        :return:
-        """
-        valence = 0
-        for bond in atom.GetBonds():
-            valence += bond.GetBondTypeAsDouble()
-        return valence - atom.GetFormalCharge()
-
     def _has_correct_valence(self, atom: Union[Chem.Atom, int]):
         if isinstance(atom, Chem.Atom):
             return self._get_valence_difference(atom) <= 0

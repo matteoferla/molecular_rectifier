@@ -72,3 +72,16 @@ class _RectifierBase:
             return mol2.GetRingInfo().BondRings()
         else:
             raise ValueError(f'Unknown mode {mode}')
+
+
+    def _get_atom_valence(self, atom: Chem.Atom):
+        """
+        Cannot get the normal way as it cannot be sanitised.
+
+        :param atom:
+        :return:
+        """
+        valence = 0
+        for bond in atom.GetBonds():
+            valence += bond.GetBondTypeAsDouble()
+        return valence - atom.GetFormalCharge()

@@ -47,3 +47,6 @@ class _RectifierOdd(_RectifierBase):
                 continue
         self.modifications.append(self.mol)
 
+    def _prevent_overclose(self):
+        pass
+

@@ -10,7 +10,7 @@ __doc__ = \
 
 import itertools
 from collections import Counter
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Union, List, Set
 
 from rdkit import Chem
 from rdkit.Geometry.rdGeometry import Point3D
@@ -24,8 +24,36 @@ from ._base import _RectifierBase
 class _RectifierRing(_RectifierBase):
 
     def fix_rings(self):
+        self._prevent_bonded_to_bridgeheads()
         self._prevent_conjoined_ring()
         self._prevent_weird_rings()
+
+    def _prevent_bonded_to_bridgeheads(self):
+        """
+        A 3-aromoatic-bond carbon cannot be bonded to anything else (except if a spiro)
+        It removes the offending bond but does nothig more...
+        """
+        # list of dict shared, ring_atom_A_idxs, ring_atom_B_idxs
+        bridge_infos = self._get_bridges()
+        for info in bridge_infos:
+            for idx in info['shared']:
+                atom: Chem.Atom = self.rwmol.GetAtomWithIdx(idx)
+                # middle atom:
+                if len(atom.GetNeighbors()) <= 2:
+                    continue
+                # heavy-heavy atom:
+                elif atom.GetAtomicNum() > 8:
+                    continue
+                # aromatic atom:
+                elif atom.GetIsAromatic() or \
+                   any([bond.GetBondType() == Chem.BondType.AROMATIC for bond in atom.GetBonds()]):
+                    neigh_idxs: Set[int] = {neigh.GetIdx() for neigh in atom.GetNeighbors()}
+                    other_idxs = neigh_idxs.difference(info['ring_atom_A_idxs'])\
+                                           .difference(info['ring_atom_B_idxs'])
+                    for idx in other_idxs:
+                        self.log.info('non ring atom bonded to bridgehead')
+                        self.rwmol.RemoveBond(atom.GetIdx(), idx)
+
 
     def _prevent_conjoined_ring(self) -> None:
         """
@@ -44,13 +72,34 @@ class _RectifierRing(_RectifierBase):
             self.log.info(f'Zero-atom bridged ring issue: bond between {idx_a}-{idx_b} removed')
             # re-run:
             self._prevent_conjoined_ring()
-        self.modifications.append(self.mol)
+        self.modifications.append(self.mol)  # not self.rwmol as I want a snapshot
 
-    def _prevent_weird_rings(self, iteration=0):
+    def _get_bridges(self) -> List[Dict[str, Union[Tuple[int]]]]:
+        """
+        The output includes not only the bridgeheads but the middle ones too
+        list of dict shared, ring_atom_A_idxs, ring_atom_A_idxs
+        """
+        bridge_info = []
         ringatoms = self._get_ring_info()  # GetRingInfo().AtomRings()
         for ring_A, ring_B in itertools.combinations(ringatoms, r=2):
             shared = set(ring_A).intersection(set(ring_B))
             if len(shared) == 0:
+                continue
+            bridge_info.append(dict(shared=shared,
+                                    ring_atom_A_idxs=ring_A,
+                                    ring_atom_B_idxs=ring_B)
+                                   )
+        return bridge_info
+
+
+    def _prevent_weird_rings(self, iteration=0):
+        bridge_info: List[Dict[str, Tuple[int]]] = self._get_bridges()
+        for info in bridge_info:
+            ring_A: Tuple[int] = info['ring_atom_A_idxs']
+            ring_B: Tuple[int] = info['ring_atom_B_idxs']
+            shared: Tuple[int] = info['shared']
+            if len(shared) == 0:
+                # no longer accessible
                 self.log.debug(f'This molecule ({self.name}) has some separate rings')
                 pass  # separate rings
             elif len(shared) < self.atoms_in_bridge_cutoff and \
@@ -101,9 +150,9 @@ class _RectifierRing(_RectifierBase):
                     self._prevent_weird_rings(iteration=iteration+1)
                 else:
                     self.log.warning(f'Too many trials to remove bridge.')
-        self.modifications.append(self.mol)
+        self.modifications.append(self.mol)  # not self.rwmol as I want a snapshot
 
-    # ===== Dep of prevent weird rings =================================================================================
+    # ===== Dependencies of prevent weird rings =================================================================================
 
     def _place_between(self, a: int, b: int, aromatic: Optional[bool] = None, atomic_number: int = 6) -> None:
         """
