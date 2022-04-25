@@ -10,6 +10,7 @@ __doc__ = \
 
 ########################################################################################################################
 from rdkit import Chem
+from rdkit.Chem import AllChem
 import itertools
 from typing import List, Tuple, Union
 from ._base import _RectifierBase
@@ -41,6 +42,7 @@ class _RectifierValence(_RectifierBase):
                 bond.SetBondType(Chem.BondType.SINGLE)
                 # debug:
                 self.modifications.append(self.mol)
+        self._update_cache()
 
     def triage_rings(self) -> None:
         """
@@ -73,6 +75,7 @@ class _RectifierValence(_RectifierBase):
             else:
                 for i in ring:
                     self.rwmol.GetAtomWithIdx(i).SetIsAromatic(False)
+        self._update_cache()
         self.modifications.append(self.mol)  # may not have changed.
 
     def fix_issues(self, _previous=None) -> None:
@@ -223,26 +226,6 @@ class _RectifierValence(_RectifierBase):
             other.SetIsAromatic(False)
             return other
 
-    def downgrade_ring(self, atom: Chem.Atom):
-        ## very crappy way of doing this
-        self.log.debug(f'downgrading whole ring!')
-        atom.SetIsAromatic(False)
-        ringinfo = self._get_ring_info(mode='atom')
-        get_atomrings = lambda ai: [ring for ring in ringinfo if ai in ring]
-        atomrings = get_atomrings(atom.GetIdx())
-        for atomring in atomrings:
-            rnieghs = self._get_ring_neighbors(atomring)
-            for n1, n2 in rnieghs:
-                self.rwmol.GetAtomWithIdx(n1).SetIsAromatic(False)
-                self.rwmol.GetAtomWithIdx(n2).SetIsAromatic(False)
-                self.rwmol.GetBondBetweenAtoms(n1, n2).SetBondType(Chem.BondType.SINGLE)
-        for atomring in atomrings:
-            rnieghs = self._get_ring_neighbors(atomring)
-            for n1, n2 in rnieghs:
-                if self._get_valence_difference(self.rwmol.GetAtomWithIdx(n1)) <= -2 and \
-                        self._get_valence_difference(self.rwmol.GetAtomWithIdx(n2)) <= -2:
-                    self.rwmol.GetBondBetweenAtoms(n1, n2).SetBondType(Chem.BondType.DOUBLE)
-
         # if len(self._get_rings(atom.GetIdx())) == 1:
         #     for bond in atom.GetBonds():
         #         bond.SetBondType(Chem.BondType.SINGLE)
@@ -344,7 +327,7 @@ class _RectifierValence(_RectifierBase):
                 self.rwmol.RemoveBond(atom.GetIdx(), neigh.GetIdx())
 
 
-    def fix_valence(self, i):
+    def fix_valence(self, i: int):
         atom = self.rwmol.GetAtomWithIdx(i)
         atom.SetFormalCharge(0)
         atom.SetNumExplicitHs(0)
@@ -358,7 +341,7 @@ class _RectifierValence(_RectifierBase):
         elif atom.GetSymbol() == 'C' and atom.GetIsAromatic() and len(atom.GetNeighbors()) == 4:
             self.log.debug('\tDowngrading ring')
             self.downgrade_ring(atom)
-        elif atom.GetSymbol() == 'C':
+        elif atom.GetSymbol() == 'C' and not atom.GetIsAromatic():
             for bond in atom.GetBonds():
                 bond.SetBondType(Chem.BondType.SINGLE)
         else:
@@ -368,3 +351,24 @@ class _RectifierValence(_RectifierBase):
             return self.rwmol
         else:
             return self.fix_valence(i)
+
+    def _adjust_Hs(self):
+        for atom in self.rwmol.GetAtoms():
+            atom.SetNumRadicalElectrons(0)
+        self.rwmol.UpdatePropertyCache()
+        mol = AllChem.AddHs(self.rwmol, addCoords=bool(self.rwmol.GetNumConformers()))
+        self.rwmol = Chem.RWMol(mol)
+        idxs = [i for ring in self._get_ring_info('atom') for i in ring]
+        for i in idxs:
+            atom: Chem.Atom = self.rwmol.GetAtomWithIdx(i)
+            self.fix_valence(i)
+
+    def _preemptive_protonate(self):
+        """
+        This is a debug test in essence as it's a bad idea
+        """
+        for atom in self.rwmol.GetAtoms():
+            if atom.GetSymbol() == 'N' and atom.GetIsAromatic() and self._get_atom_valence(atom) < 4:
+                atom.SetFormalCharge(1)
+                atom.SetNumExplicitHs(1)
+                atom.SetNumRadicalElectrons(0)

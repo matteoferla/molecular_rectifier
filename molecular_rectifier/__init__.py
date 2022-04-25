@@ -21,7 +21,7 @@ from ._odd import _RectifierOdd  # fixes specific oddities
 from ._valence import _RectifierValence  # fixes valence
 from ._overclose import _RectifierOverclose  # fixes extreme overlaps
 from rdkit import Chem
-
+from rdkit.Chem import AllChem
 
 class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierValence):
     """
@@ -41,13 +41,43 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
     >>> Rectifier(mol).fix().mol
     """
 
-    def fix(self) -> Rectifier:
-        self.absorb_overclose()  # from _RectifierOverclose
+    def fix(self, catchErrors:bool=False) -> Rectifier:
+        """
+        `CatchErrors` now does nothing.
+        """
+        self.log.debug('============== Rectifier fix started =============')
+        self.log.debug(self.mol_summary)
+        self.absorb_overclose(distance_cutoff=0.8)  # from _RectifierOverclose
+        self.log.debug(self.mol_summary)
+        self.log.debug('------------ overclose safeguard done ------------')
+        try:
+            self._fix_aromatic_rings()
+            Chem.SetAromaticity(self.rwmol)
+            flags = AllChem.SANITIZE_ALL ^ AllChem.SANITIZE_KEKULIZE
+            self._update_cache(sanitize=False, flags=flags)
+            self.log.debug(self.mol_summary)
+            self.log.debug('------------ Aromatic correction done ------------')
+        except Exception as error:
+            self.log.info(f'{error.__class__.__name__}: {error}')
+        # self._preemptive_protonate() this is a weird test
+        self._update_cache(sanitize=True, flags=flags)
         self.fix_rings()  # from _RectifierRing
+        self.log.debug(self.mol_summary)
+        self.log.debug('------------ ring fixes done ------------')
         self.prevent_oddities()  # from _RectifierOdd
         self.ununspecified_bonds()  # from _RectifierValence
         self.triage_rings()  # from _RectifierValence
+        self.log.debug(self.mol_summary)
+        self.log.debug('------------ oddity fixes done ------------')
         Chem.Cleanup(self.rwmol)
+        self._adjust_Hs()
+        self.log.debug(self.mol_summary)
+        self.log.debug('------------ hydrogens done ------------')
         self.fix_issues()  # from _RectifierValence
-        Chem.SanitizeMol(self.rwmol, sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL)
+        self.log.debug(self.mol_summary)
+        self.log.debug('------------ valence drama done ------------')
+        self._update_cache(sanitize=True)
+        self.fix_aromatic_radicals()  # just in case
+        self.log.debug(self.mol_summary)
+        self.log.debug('------------ check against aromatic radicals done ------------')
         return self

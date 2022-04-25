@@ -10,6 +10,7 @@ __doc__ = \
 
 import itertools
 from collections import Counter
+from rdkit.Chem import rdqueries
 from typing import Optional, Tuple, Dict, Union, List, Set
 
 from rdkit import Chem
@@ -25,8 +26,41 @@ class _RectifierRing(_RectifierBase):
 
     def fix_rings(self):
         self._prevent_bonded_to_bridgeheads()
+        self._fix_aromatic_rings()
+        self.fix_aromatic_radicals() # unlikely to have an effect
         self._prevent_conjoined_ring()
         self._prevent_weird_rings()
+
+    def fix_aromatic_radicals(self):
+        """
+        This happens on
+        """
+        self._update_cache(sanitize=True, flags=Chem.SanitizeFlags.SANITIZE_FINDRADICALS)
+        ringbonds = self._get_ring_info(mode='bond')  # == sane_mol.GetRingInfo().BondRings()
+        for ring_i, bonds_ring in enumerate(ringbonds): # self.rwmol.GetBonds():
+            for bond_i in bonds_ring:
+                bond = self.rwmol.GetBondWithIdx(bond_i)
+                if not bond.GetEndAtom().GetNumRadicalElectrons():
+                    continue
+                if not bond.GetBeginAtom().GetNumRadicalElectrons():
+                    continue
+                self.log.info('Radical inaromatic structure present')
+                # both sides are radicals...
+                if bond.GetBondType() == Chem.BondType.AROMATIC:
+                    bond.SetBondType(Chem.BondType.DOUBLE)
+                    for atom in (bond.GetBeginAtom(), bond.GetEndAtom()):
+                        atom.SetNumRadicalElectrons(0)
+                        if hasattr(atom, 'UpdatePropertyCache'):
+                            atom.UpdatePropertyCache()
+                    # self._downgrade_aromatic_bond(bond_j) not needed.
+        # add hydrogen?
+        # rdqueries does not work on unsanitary molecules!
+        #is_radical = rdqueries.NumRadicalElectronsEqualsQueryAtom(1)
+        # for atom in self.rwmol.GetAtoms(): #: Chem.Atom
+        #     if atom.GetSymbol() != 'C' and atom.GetNumRadicalElectrons():
+        #         atom.SetFormalCharge(+1)
+        #         atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+        #     atom.SetNumRadicalElectrons(0)
 
     def _prevent_bonded_to_bridgeheads(self):
         """
@@ -54,6 +88,14 @@ class _RectifierRing(_RectifierBase):
                         self.log.info('non ring atom bonded to bridgehead')
                         self.rwmol.RemoveBond(atom.GetIdx(), idx)
 
+    def make_all_rings_aromatic(self):
+        """
+        This is an extreme debug method not called by fix.
+        """
+        for i, bonds in enumerate(self.rwmol.GetRingInfo().BondRings()):
+            if any([self.rwmol.GetBondWithIdx(j).GetBondType() == Chem.BondType.AROMATIC for j in bonds]):
+                for j in bonds:
+                    self.rwmol.GetBondWithIdx(j).SetBondType(Chem.BondType.AROMATIC)
 
     def _prevent_conjoined_ring(self) -> None:
         """
@@ -80,7 +122,7 @@ class _RectifierRing(_RectifierBase):
         list of dict shared, ring_atom_A_idxs, ring_atom_A_idxs
         """
         bridge_info = []
-        ringatoms = self._get_ring_info()  # GetRingInfo().AtomRings()
+        ringatoms = self._get_ring_info(mode='atom')  # GetRingInfo().AtomRings()
         for ring_A, ring_B in itertools.combinations(ringatoms, r=2):
             shared = set(ring_A).intersection(set(ring_B))
             if len(shared) == 0:
@@ -247,5 +289,27 @@ class _RectifierRing(_RectifierBase):
             neigh.SetBoolProp('_Novel', True)
             new_neigh.SetBoolProp('_Novel', True)
             self.rwmol.GetAtomWithIdx(a).SetBoolProp('_Novel', True)
+
+    def _fix_aromatic_rings(self):
+        ringbonds = self._get_ring_info(mode='bond')
+        get_bond = lambda i: self.rwmol.GetBondWithIdx(i)
+        for i, bonds in enumerate(ringbonds):
+             uniques = [bond_i for bond_i in bonds if sum([bond_i in ring for ring in ringbonds]) == 1]
+             if not any([get_bond(bond_i).GetBondType() == Chem.BondType.AROMATIC for bond_i in uniques]):
+                 continue
+             # all bonds are aromatic
+             for bond_i in bonds:
+                 bond = get_bond(bond_i)
+                 bond.SetBondType(Chem.BondType.AROMATIC)
+                 bond.GetBeginAtom().SetIsAromatic(True)
+                 bond.GetEndAtom().SetIsAromatic(True)
+        self._update_cache()
+                
+    def _update_cache(self, sanitize=False, flags:Chem.SanitizeFlags=Chem.SanitizeFlags.SANITIZE_ALL):
+        if hasattr(self.rwmol, 'UpdatePropertyCache'):
+            self.rwmol.UpdatePropertyCache(strict=False)
+        if sanitize:
+            Chem.SanitizeMol(self.rwmol, sanitizeOps=flags, catchErrors=True)
+
 
 

@@ -14,11 +14,13 @@ class _RectifierOverclose(_RectifierBase):
     This simply absorbs all which are egrigiously too close
     It is an extreme fallback
     """
-    def absorb_overclose(self, distance_cutoff: float=0.6):
+    def absorb_overclose(self, distance_cutoff: float):
         """
         Never say never... This really should have an effect as Fragmenstein monster is build for this.
         But stuff always goes wrong
         """
+        if self.rwmol.GetNumConformers() == 0:
+            return
         # make matrix
         distance_matrix: np.ndarray = Chem.Get3DDistanceMatrix(self.rwmol)
         # nan fill the self values
@@ -57,4 +59,6 @@ class _RectifierOverclose(_RectifierBase):
                     break
             else:
                 break
+        # store copy (self.mol is property <= .rwmol
+        self.modifications.append(self.mol)
 
