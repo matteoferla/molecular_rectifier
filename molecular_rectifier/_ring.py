@@ -51,7 +51,7 @@ class _RectifierRing(_RectifierBase):
                     for atom in (bond.GetBeginAtom(), bond.GetEndAtom()):
                         atom.SetNumRadicalElectrons(0)
                         if hasattr(atom, 'UpdatePropertyCache'):
-                            atom.UpdatePropertyCache()
+                            atom.UpdatePropertyCache(strict=False)
                     # self._downgrade_aromatic_bond(bond_j) not needed.
         # add hydrogen?
         # rdqueries does not work on unsanitary molecules!

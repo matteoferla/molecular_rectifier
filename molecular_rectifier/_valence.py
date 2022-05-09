@@ -355,7 +355,7 @@ class _RectifierValence(_RectifierBase):
     def _adjust_Hs(self):
         for atom in self.rwmol.GetAtoms():
             atom.SetNumRadicalElectrons(0)
-        self.rwmol.UpdatePropertyCache()
+        self.rwmol.UpdatePropertyCache(strict=False)
         mol = AllChem.AddHs(self.rwmol, addCoords=bool(self.rwmol.GetNumConformers()))
         self.rwmol = Chem.RWMol(mol)
         idxs = [i for ring in self._get_ring_info('atom') for i in ring]
