@@ -27,13 +27,13 @@ class _RectifierRing(_RectifierBase):
     def fix_rings(self):
         self._prevent_bonded_to_bridgeheads()
         self._fix_aromatic_rings()
-        self.fix_aromatic_radicals() # unlikely to have an effect
+        self.fix_aromatic_radicals()  # unlikely to have an effect
         self._prevent_conjoined_ring()
         self._prevent_weird_rings()
 
     def fix_aromatic_radicals(self):
         """
-        This happens on
+        This happens on a super corner case and I do not know why.
         """
         self._update_cache(sanitize=True, flags=Chem.SanitizeFlags.SANITIZE_FINDRADICALS)
         ringbonds = self._get_ring_info(mode='bond')  # == sane_mol.GetRingInfo().BondRings()
@@ -44,14 +44,13 @@ class _RectifierRing(_RectifierBase):
                     continue
                 if not bond.GetBeginAtom().GetNumRadicalElectrons():
                     continue
-                self.log.info('Radical inaromatic structure present')
+                self.log.info('Radical in aromatic structure present')
                 # both sides are radicals...
                 if bond.GetBondType() == Chem.BondType.AROMATIC:
                     bond.SetBondType(Chem.BondType.DOUBLE)
                     for atom in (bond.GetBeginAtom(), bond.GetEndAtom()):
                         atom.SetNumRadicalElectrons(0)
-                        if hasattr(atom, 'UpdatePropertyCache'):
-                            atom.UpdatePropertyCache(strict=False)
+                        self._update_cache(sanitize=False)
                     # self._downgrade_aromatic_bond(bond_j) not needed.
         # add hydrogen?
         # rdqueries does not work on unsanitary molecules!
@@ -61,6 +60,11 @@ class _RectifierRing(_RectifierBase):
         #         atom.SetFormalCharge(+1)
         #         atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
         #     atom.SetNumRadicalElectrons(0)
+
+    def no_radicals(self):
+        for atom in self.rwmol.GetAtoms():
+            atom.SetNumRadicalElectrons(0)
+        self._update_cache(sanitize=False)
 
     def _prevent_bonded_to_bridgeheads(self):
         """
@@ -148,7 +152,7 @@ class _RectifierRing(_RectifierBase):
                     self.atoms_in_bridge_cutoff >= 2 \
                     and len(ring_A) == len(ring_B):
                 # adamantene/norbornane/tropinone kind of thing
-                self.log.warning(f'This molecule ({self.name}) has a bridge: leaving')
+                self.log.warning(f'This molecule ({self.name}) has a bridge: leaving/spiro')
                 pass  # ideally check if planar...
             elif len(shared) == 1:
                 self.log.debug(f'This molecule ({self.name}) has a spiro bicycle')
@@ -182,7 +186,7 @@ class _RectifierRing(_RectifierBase):
                     pass  # ????
             elif len(shared) < self.atoms_in_bridge_cutoff:
                 # adamantene/norbornane/tropinone kind of thing
-                self.log.warning(f'This molecule ({self.name}) has a bridge: leaving')
+                self.log.warning(f'This molecule ({self.name}) has a bridge: leaving/spiro')
                 pass  # ideally check if planar...
             else:
                 self.log.warning(f'This molecule ({self.name}) has a bridge that will be removed')
@@ -291,25 +295,64 @@ class _RectifierRing(_RectifierBase):
             self.rwmol.GetAtomWithIdx(a).SetBoolProp('_Novel', True)
 
     def _fix_aromatic_rings(self):
-        ringbonds = self._get_ring_info(mode='bond')
+        ringbonds:Tuple[Tuple[int]] = self._get_ring_info(mode='bond')
+        ringatoms: Tuple[Tuple[int]] = self._get_ring_info(mode='atom')
         get_bond = lambda i: self.rwmol.GetBondWithIdx(i)
         for i, bonds in enumerate(ringbonds):
-             uniques = [bond_i for bond_i in bonds if sum([bond_i in ring for ring in ringbonds]) == 1]
-             if not any([get_bond(bond_i).GetBondType() == Chem.BondType.AROMATIC for bond_i in uniques]):
-                 continue
-             # all bonds are aromatic
-             for bond_i in bonds:
-                 bond = get_bond(bond_i)
-                 bond.SetBondType(Chem.BondType.AROMATIC)
-                 bond.GetBeginAtom().SetIsAromatic(True)
-                 bond.GetEndAtom().SetIsAromatic(True)
-        self._update_cache()
-                
-    def _update_cache(self, sanitize=False, flags:Chem.SanitizeFlags=Chem.SanitizeFlags.SANITIZE_ALL):
-        if hasattr(self.rwmol, 'UpdatePropertyCache'):
-            self.rwmol.UpdatePropertyCache(strict=False)
-        if sanitize:
-            Chem.SanitizeMol(self.rwmol, sanitizeOps=flags, catchErrors=True)
+            # find bonds that are not shared with other rings
+            uniques = [bond_i for bond_i in bonds if sum([bond_i in ring for ring in ringbonds]) == 1]
+            # ignore rings that are not aromatic
+            if not any([get_bond(bond_i).GetBondType() == Chem.BondType.AROMATIC for bond_i in uniques]):
+                continue
+            # for special case for ring with 5 aromatic carbons
+            composition:Set[str] = {get_bond(bond_i).GetBeginAtom().GetSymbol() for bond_i in bonds}
+            # for special case of spiro rings
+            if self.check_for_spiro(i, ringatoms):
+                self._fix_nonaromatic(uniques)
+            elif len(bonds) == 5 and composition == {'C'}:
+                self._fix_penta_aromatic(bonds)
+            elif len(bonds) != 6 and len(bonds) != 18 and composition == {'C'}:
+                self._fix_nonaromatic(uniques)
+            else:   # all bonds are aromatic
+                self._set_atomatic(bonds)
+            self._update_cache()
 
+    def _set_atomatic(self, bonds):
+        get_bond = lambda i: self.rwmol.GetBondWithIdx(i)
+        for bond_i in bonds:
+            bond = get_bond(bond_i)
+            bond.SetBondType(Chem.BondType.AROMATIC)
+            bond.GetBeginAtom().SetIsAromatic(True)
+            bond.GetEndAtom().SetIsAromatic(True)
 
+    def _fix_penta_aromatic(self, bonds):
+        """
+        The ring has an invalid composition for an aromatic ring.
+        """
+        self.log.debug(f'Fixing penta aromatic carbon ring "cyclopent-ine" to pyrrole')
+        get_bond = lambda i: self.rwmol.GetBondWithIdx(i)
+        atoms = [get_bond(bond_i).GetBeginAtom() for bond_i in bonds]
+        # find the central atom
+        for atom in atoms:  #: Chem.Atom
+            if len(atom.GetNeighbors()) == 2:
+                # downgrade to nitrogen
+                atom.SetNumRadicalElectrons(0)
+                atom.SetAtomicNum(7)
+                atom.SetNumExplicitHs(1)
+                return self._set_atomatic(bonds)
 
+    def _fix_nonaromatic(self, bonds):
+        self.log.debug(f'Downgrading non-aromatic ring to single bond')
+        get_bond = lambda i: self.rwmol.GetBondWithIdx(i)
+        for bond in map(get_bond, bonds):
+            bond.SetBondType(Chem.BondType.SINGLE)
+            bond.GetBeginAtom().SetIsAromatic(False)
+            bond.GetEndAtom().SetIsAromatic(False)
+
+    def check_for_spiro(self, ring_idx: int, ringatoms: Tuple[Tuple[int]]) -> bool:
+        ringatom_idxs = ringatoms[ring_idx]
+        for atom_idx in ringatom_idxs:
+            if len(self.rwmol.GetAtomWithIdx(atom_idx).GetNeighbors()) > 3:
+                return True
+        else:
+            return False

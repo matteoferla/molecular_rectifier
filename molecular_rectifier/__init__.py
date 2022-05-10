@@ -54,13 +54,13 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
             self._fix_aromatic_rings()
             Chem.SetAromaticity(self.rwmol)
             flags = AllChem.SANITIZE_ALL ^ AllChem.SANITIZE_KEKULIZE
-            self._update_cache(sanitize=False, flags=flags)
+            self._update_cache(sanitize=True, flags=flags)
             self.log.debug(self.mol_summary)
             self.log.debug('------------ Aromatic correction done ------------')
         except Exception as error:
             self.log.info(f'{error.__class__.__name__}: {error}')
+            self._update_cache(sanitize=False)
         # self._preemptive_protonate() this is a weird test
-        self._update_cache(sanitize=True, flags=flags)
         self.fix_rings()  # from _RectifierRing
         self.log.debug(self.mol_summary)
         self.log.debug('------------ ring fixes done ------------')
@@ -77,7 +77,10 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
         self.log.debug(self.mol_summary)
         self.log.debug('------------ valence drama done ------------')
         self._update_cache(sanitize=True)
-        self.fix_aromatic_radicals()  # just in case
+        # round trip to RWMol
+        self.fix_aromatic_radicals()  # from _RectifierRing
+        self.rwmol = Chem.RWMol(self.mol)
+        self.no_radicals()  # just in case
         self.log.debug(self.mol_summary)
-        self.log.debug('------------ check against aromatic radicals done ------------')
+        self.log.debug('------------ check against radicals done ------------')
         return self

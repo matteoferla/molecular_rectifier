@@ -133,3 +133,8 @@ class _RectifierBase:
                  ]
         return '; '.join(parts)
 
+    def _update_cache(self, sanitize=False, flags:Chem.SanitizeFlags=Chem.SanitizeFlags.SANITIZE_ALL):
+        if hasattr(self.rwmol, 'UpdatePropertyCache'):
+            self.rwmol.UpdatePropertyCache(strict=False) #
+        if sanitize:
+            Chem.SanitizeMol(self.rwmol, sanitizeOps=flags, catchErrors=True)
