@@ -138,3 +138,17 @@ class _RectifierBase:
             self.rwmol.UpdatePropertyCache(strict=False) #
         if sanitize:
             Chem.SanitizeMol(self.rwmol, sanitizeOps=flags, catchErrors=True)
+
+    def has_issues(self) -> bool:
+        """
+        ``Chem.DetectChemistryProblems(mol)`` is like running a test of ``Chem.SanitizeMol(mol)``,
+        but it does not count radicals as a problem... in fact SanitizeMol will introduce radicals!
+        This can be mimicked by ``Chem.AssignRadicals(mol)``.
+        Therefore this method returns true if there is an issue according to ``Chem.DetectChemistryProblems(mol)``
+        but also if sanitization would result in radicals.
+        """
+        if Chem.DetectChemistryProblems(self.rwmol):
+            return True
+        mol:Chem.Mol = self.mol  # this is a copy
+        Chem.AssignRadicals(mol)
+        return bool(sum(map(Chem.Atom.GetNumRadicalElectrons, mol.GetAtoms())))

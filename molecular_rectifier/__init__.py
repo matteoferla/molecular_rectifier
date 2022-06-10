@@ -41,7 +41,7 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
     >>> Rectifier(mol).fix().mol
     """
 
-    def fix(self, catchErrors:bool=False) -> Rectifier:
+    def fix(self, catchErrors:bool=False, iteration:int=0) -> Rectifier:
         """
         `CatchErrors` now does nothing.
         """
@@ -51,12 +51,13 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
         self.log.debug(self.mol_summary)
         self.log.debug('------------ overclose safeguard done ------------')
         try:
-            self._fix_aromatic_rings()
-            Chem.SetAromaticity(self.rwmol)
-            flags = AllChem.SANITIZE_ALL ^ AllChem.SANITIZE_KEKULIZE
-            self._update_cache(sanitize=True, flags=flags)
-            self.log.debug(self.mol_summary)
-            self.log.debug('------------ Aromatic correction done ------------')
+            if self.has_issues():
+                self._fix_aromatic_rings()
+                Chem.SetAromaticity(self.rwmol)
+                flags = AllChem.SANITIZE_ALL ^ AllChem.SANITIZE_KEKULIZE
+                self._update_cache(sanitize=True, flags=flags)
+                self.log.debug(self.mol_summary)
+                self.log.debug('------------ Aromatic correction done ------------')
         except Exception as error:
             self.log.info(f'{error.__class__.__name__}: {error}')
             self._update_cache(sanitize=False)
@@ -73,14 +74,21 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
         self._adjust_Hs()
         self.log.debug(self.mol_summary)
         self.log.debug('------------ hydrogens done ------------')
-        self.fix_issues()  # from _RectifierValence
+        if self.has_issues():
+            self.fix_issues()  # from _RectifierValence
         self.log.debug(self.mol_summary)
         self.log.debug('------------ valence drama done ------------')
         self._update_cache(sanitize=True)
         # round trip to RWMol
-        self.fix_aromatic_radicals()  # from _RectifierRing
+        if self.has_issues():
+            self.log.debug('Some issues remain.')
+            self.fix_aromatic_radicals()  # from _RectifierRing
         self.rwmol = Chem.RWMol(self.mol)
         self.no_radicals()  # just in case
         self.log.debug(self.mol_summary)
         self.log.debug('------------ check against radicals done ------------')
+        iteration += 1
+        if self.has_issues() and iteration < 3:
+            self.log.debug('Some issues remain... Trying again!')
+            self.fix(catchErrors=catchErrors, iteration=iteration)
         return self

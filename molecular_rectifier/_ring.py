@@ -27,7 +27,7 @@ class _RectifierRing(_RectifierBase):
     def fix_rings(self):
         self._prevent_bonded_to_bridgeheads()
         self._fix_aromatic_rings()
-        self.fix_aromatic_radicals()  # unlikely to have an effect
+        self.fix_aromatic_radicals()  # unlikely to not have an effect
         self._prevent_conjoined_ring()
         self._prevent_weird_rings()
 
@@ -305,7 +305,9 @@ class _RectifierRing(_RectifierBase):
             if not any([get_bond(bond_i).GetBondType() == Chem.BondType.AROMATIC for bond_i in uniques]):
                 continue
             # for special case for ring with 5 aromatic carbons
-            composition:Set[str] = {get_bond(bond_i).GetBeginAtom().GetSymbol() for bond_i in bonds}
+            composition:Set[str] = {get_bond(bond_i).GetBeginAtom().GetSymbol() for bond_i in bonds}.union(
+                                            {get_bond(bond_i).GetEndAtom().GetSymbol() for bond_i in bonds}
+                                        )
             # for special case of spiro rings
             if self.check_for_spiro(i, ringatoms):
                 self._fix_nonaromatic(uniques)
