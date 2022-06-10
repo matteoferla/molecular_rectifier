@@ -26,7 +26,7 @@ descr = __doc__.split('\n')[1] # non-title line.
 
 setup(
     name='molecular_rectifier',
-    version='0.1.6',
+    version='0.1.7',
     python_requires='>3.6',
     packages=find_packages(),
     url='https://github.com/matteoferla/molecular_rectifier',
