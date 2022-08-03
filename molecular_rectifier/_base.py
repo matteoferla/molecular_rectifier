@@ -9,7 +9,7 @@ __doc__ = \
 ########################################################################################################################
 
 import logging
-from typing import Tuple, Union
+from typing import Tuple, Union, Sequence, List, Set
 from collections import Counter
 from rdkit import Chem
 
@@ -102,7 +102,7 @@ class _RectifierBase:
         for atom in (bond.GetBeginAtom(), bond.GetBeginAtom()):
             atom.SetIsAromatic(False)
 
-    def downgrade_ring(self, atom: Chem.Atom):
+    def downgrade_ring(self, atom: Chem.Atom, hard=False):
         ## very crappy way of doing this
         self.log.info(f'downgrading whole ring due to {atom.GetSymbol()} atom i={atom.GetIdx()}')
         atom.SetIsAromatic(False)
@@ -110,18 +110,55 @@ class _RectifierBase:
         get_atomrings = lambda ai: [ring for ring in ringinfo if ai in ring]
         atomrings = get_atomrings(atom.GetIdx())
         for atomring in atomrings:
-            rnieghs = self._get_ring_neighbors(atomring) # list of pairs of indices that are neighbors in the ring
+            rnieghs = self._get_ring_neighbors(atomring)  # list of pairs of indices that are neighbors in the ring
             for n1, n2 in rnieghs:
                 for ai in (n1, n2):
                     atom: Chem.Atom = self.rwmol.GetAtomWithIdx(ai)
                     atom.SetIsAromatic(False)
                 self.rwmol.GetBondBetweenAtoms(n1, n2).SetBondType(Chem.BondType.SINGLE)
+        if hard:
+            return
+        # add double bonds strategically
         for atomring in atomrings:
             rnieghs = self._get_ring_neighbors(atomring)
             for n1, n2 in rnieghs:
                 if self._get_valence_difference(self.rwmol.GetAtomWithIdx(n1)) <= -2 and \
                         self._get_valence_difference(self.rwmol.GetAtomWithIdx(n2)) <= -2:
                     self.rwmol.GetBondBetweenAtoms(n1, n2).SetBondType(Chem.BondType.DOUBLE)
+
+    def downgrade_substituents(self, atom: Chem.Atom) -> bool:
+        """
+        Prequel to ``downgrade_ring``.
+        Downgrades double bonded substituents even if they are 4n+2 obeying...
+        """
+        change = False
+        ai: int = atom.GetIdx()
+        bondrings = [br for br in self._get_ring_info(mode='bond') if ai in br]
+        if len(bondrings) == 0:
+            return False  # it is not in a ring
+        for bond_idxs in bondrings:
+            bonds: List[Chem.Bond] = list(map(self.rwmol.GetBondWithIdx, bond_idxs))
+            # expand bonds to substituents
+            exbond_idxs: Set[int] = set()
+            for bond in bonds:
+                for atom in (bond.GetBeginAtom(), bond.GetEndAtom()):
+                    exbond_idxs.update(map(Chem.Bond.GetIdx, atom.GetBonds()))
+            subbonds: List[Chem.Bond] = list(map(self.rwmol.GetBondWithIdx, set(exbond_idxs).difference(bond_idxs)))
+            for bond in subbonds:
+                if bond.GetBondType() in (Chem.BondType.DOUBLE, Chem.BondType.TRIPLE):
+                    bond.SetBondType(Chem.BondType.SINGLE)
+                    change = True
+        return change
+
+    def strip_hydrogens(self):
+        """
+        This is not ideal... last resort only
+        """
+        for i in list(range(self.rwmol.GetNumAtoms() - 1, 0 - 1, -1)):
+            if self.rwmol.GetAtomWithIdx(i).GetSymbol() == 'H':
+                self.rwmol.RemoveAtom(i)
+        for a in self.rwmol.GetAtoms():
+            a.SetNoImplicit(False)
 
     @property
     def mol_summary(self) -> str:
@@ -135,7 +172,7 @@ class _RectifierBase:
 
     def _update_cache(self, sanitize=False, flags:Chem.SanitizeFlags=Chem.SanitizeFlags.SANITIZE_ALL):
         if hasattr(self.rwmol, 'UpdatePropertyCache'):
-            self.rwmol.UpdatePropertyCache(strict=False) #
+            self.rwmol.UpdatePropertyCache(strict=False)
         if sanitize:
             Chem.SanitizeMol(self.rwmol, sanitizeOps=flags, catchErrors=True)
 

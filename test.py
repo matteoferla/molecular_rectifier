@@ -72,6 +72,25 @@ class RectifierTester(unittest.TestCase):
         recto = Rectifier(mol).fix()
         self.assertEqual(AllChem.RemoveHs(recto.mol).GetNumAtoms(), 1)
 
+    def test_sub_downgrade(self):
+        # none of these should be touched
+        xanthine = Chem.MolFromSmiles('c1[nH]c2c(n1)nc(nc2O)O')
+        caffeine = Chem.MolFromSmiles('CN1C=NC2=C1C(=O)N(C(=O)N2C)C')
+        naphthalene = Chem.MolFromSmiles('c1c2ccccc2ccc1')
+        naphthoquinone = Chem.MolFromSmiles('O=C1c2ccccc2C(=O)cc1')
+        anthracene = Chem.MolFromSmiles('c1ccc2cc3ccccc3cc2c1')
+        primulin = Chem.MolFromSmiles(
+            'COc1cc(cc(c1O)OC)c2c(cc3c(cc(cc3[o+]2)O)O)O[C@H]4[C@@H]([C@H]([C@H]([C@H](O4)CO)O)O)O')
+        for mol in (xanthine, caffeine, naphthalene, naphthoquinone, anthracene, primulin):
+            self.assertTrue(Rectifier(mol).fix().mol.HasSubstructMatch(mol),
+                            'failed to fix molecule')
+        # this will
+        phenol = Chem.MolFromSmiles('Oc1ccccc1')
+        phenmonoone = Chem.Mol(phenol)  # not a real thing...
+        phenmonoone.GetBondWithIdx(0).SetBondType(Chem.BondType.DOUBLE)
+        self.assertTrue(Rectifier(phenmonoone).fix().mol.HasSubstructMatch(phenol),
+                        'failed to fix substituent!')
+
     def test_real_merger(self):
         molblock = '''spiro-ditoluene
      RDKit          2D

@@ -43,7 +43,7 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
 
     def fix(self, catchErrors:bool=False, iteration:int=0) -> Rectifier:
         """
-        `CatchErrors` now does nothing.
+        `CatchErrors` is the command in Sanitize, but it is not used there.
         """
         self.log.debug('============== Rectifier fix started =============')
         self.log.debug(self.mol_summary)
@@ -83,12 +83,41 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
         if self.has_issues():
             self.log.debug('Some issues remain.')
             self.fix_aromatic_radicals()  # from _RectifierRing
-        self.rwmol = Chem.RWMol(self.mol)
+        self.rwmol = Chem.RWMol(self.mol)  # noqa it is a word
         self.no_radicals()  # just in case
         self.log.debug(self.mol_summary)
         self.log.debug('------------ check against radicals done ------------')
         iteration += 1
-        if self.has_issues() and iteration < 3:
+        if not self.has_issues():
+            pass
+        if iteration < 3:
             self.log.debug('Some issues remain... Trying again!')
             self.fix(catchErrors=catchErrors, iteration=iteration)
+        elif iteration == 3:
+            self.strip_hydrogens()
+            problems = Chem.DetectChemistryProblems(self.rwmol)
+            for p in problems:
+                if p.GetType() == 'KekulizeException':
+                    for i in p.GetAtomIndices():
+                        self.log.debug(f'KekulizeException downgrade_substituents last resort: {i}')
+                        self.downgrade_substituents(self.rwmol.GetAtomWithIdx(i))
+            self.log.debug('Some issues remain. Stripping hydrogens...')
+            self.fix(catchErrors=catchErrors, iteration=iteration)
+        elif iteration == 4:
+            problems = Chem.DetectChemistryProblems(self.rwmol)
+            for p in problems:
+                if p.GetType() == 'KekulizeException':
+                    for i in p.GetAtomIndices():
+                        self.log.debug(f'KekulizeException downgrade_ring last resort: {i}')
+                        self.downgrade_ring(self.rwmol.GetAtomWithIdx(i), hard=True)
+            self.fix(catchErrors=catchErrors, iteration=iteration)
+        else:
+            pass # burn...
+        # check:
+        CaughtError = Exception if catchErrors else ()  # noqa Uppercase as its a class
+        try:
+            self._update_cache(sanitize=False)  # catchErrors is true...
+            Chem.SanitizeMol(self.rwmol, catchErrors=False)
+        except CaughtError as error:
+            self.log.info(f'{error.__class__.__name__}: {error}')
         return self

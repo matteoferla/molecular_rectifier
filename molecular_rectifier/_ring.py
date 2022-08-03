@@ -295,6 +295,9 @@ class _RectifierRing(_RectifierBase):
             self.rwmol.GetAtomWithIdx(a).SetBoolProp('_Novel', True)
 
     def _fix_aromatic_rings(self):
+        """
+        Does not test for 4n+2. That is a headache due to charge of non-carbon elements...
+        """
         ringbonds:Tuple[Tuple[int]] = self._get_ring_info(mode='bond')
         ringatoms: Tuple[Tuple[int]] = self._get_ring_info(mode='atom')
         get_bond = lambda i: self.rwmol.GetBondWithIdx(i)
@@ -305,7 +308,7 @@ class _RectifierRing(_RectifierBase):
             if not any([get_bond(bond_i).GetBondType() == Chem.BondType.AROMATIC for bond_i in uniques]):
                 continue
             # for special case for ring with 5 aromatic carbons
-            composition:Set[str] = {get_bond(bond_i).GetBeginAtom().GetSymbol() for bond_i in bonds}.union(
+            composition: Set[str] = {get_bond(bond_i).GetBeginAtom().GetSymbol() for bond_i in bonds}.union(
                                             {get_bond(bond_i).GetEndAtom().GetSymbol() for bond_i in bonds}
                                         )
             # for special case of spiro rings

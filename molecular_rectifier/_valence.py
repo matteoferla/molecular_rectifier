@@ -126,6 +126,8 @@ class _RectifierValence(_RectifierBase):
                             self._valence_mode = 'max'
                 else:
                     for i in p.GetAtomIndices():
+                        if self.downgrade_substituents(self.rwmol.GetAtomWithIdx(i)):
+                            break
                         self.downgrade_ring(self.rwmol.GetAtomWithIdx(i))
                     self.triage_rings()
             ############################################################
