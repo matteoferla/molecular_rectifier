@@ -45,6 +45,7 @@ class _RectifierOdd(_RectifierBase):
                     pass
             else:
                 continue
+        self.log.debug(f'Storing molecule #{len(self.modifications)} in `.modifications`')
         self.modifications.append(self.mol)
 
     def _prevent_overclose(self):

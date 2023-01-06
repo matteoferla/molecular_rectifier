@@ -7,14 +7,6 @@ if sys.version_info.major != 3 or sys.version_info.minor < 6:
     print(sys.version_info)
     raise SystemError('Module written for Python 3.6+.')
 
-# ---------- Non pip modules  ------------------------------------------------------------------------------------------
-
-if not util.find_spec('rdkit'):
-    warn('This 3.6+ script **requires** rdkit which cannot be pip installed.' +
-                              ' To install try either ' +
-                              'conda install -c conda-forge rdkit or ' +
-                              'sudo apt-get/brew install python3-rdkit or visit rdkit documentation.')
-
 # ------------ description ---------------------------------------------------------------------------------------------
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
@@ -26,9 +18,10 @@ descr = __doc__.split('\n')[1] # non-title line.
 
 setup(
     name='molecular_rectifier',
-    version='0.1.8',
+    version='0.1.9',
     python_requires='>3.6',
     packages=find_packages(),
+    install_requires=['rdkit'],
     url='https://github.com/matteoferla/molecular_rectifier',
     license='MIT',
     author='Matteo Ferla',

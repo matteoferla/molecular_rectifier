@@ -10,7 +10,7 @@ __author__ = "Matteo Ferla. [Github](https://github.com/matteoferla)"
 __email__ = "matteo.ferla@gmail.com"
 __date__ = "2021 A.D."
 __license__ = "MIT"
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 __citation__ = "See Fragmenstein"
 
 ########################################################################################################################
@@ -27,12 +27,12 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
     """
     Fixes the nastiness.
 
-    Do note that that the Chem.Mol does not get modified in place.
+    Do note that the ``Chem.Mol`` does not get modified in place.
     ``.rwmol`` does and is a Chem.RWMol. The ``.mol`` is a Chem.Mol.
 
     The steps can be found in ``.modifications``.
 
-    The .log log is not given a handler.
+    The ``.log`` log is not given a handler.
 
     New atoms with have the bool prop ``_Novel``.
 
@@ -90,7 +90,7 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
         iteration += 1
         if not self.has_issues():
             pass
-        if iteration < 3:
+        elif iteration < 3:
             self.log.debug('Some issues remain... Trying again!')
             self.fix(catchErrors=catchErrors, iteration=iteration)
         elif iteration == 3:
