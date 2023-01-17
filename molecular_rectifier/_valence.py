@@ -12,7 +12,7 @@ __doc__ = \
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import itertools
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Sequence
 from ._base import _RectifierBase
 
 
@@ -101,35 +101,35 @@ class _RectifierValence(_RectifierBase):
             self.log.debug(f'(Iteration: {self._iterations_done}) N problems {len(problems)}')
             p = problems[0]
             self.log.debug(f'(Iteration: {self._iterations_done}) Issue {p.GetType()}: {p.Message()}')
-            if p.Message() == _previous:
-                self.triage_rings()
-            ############################################################
-            if p.GetType() == 'KekulizeException':
-                if p.Message() != _previous:
-                    N = self._get_nitrogens(p.GetAtomIndices())
-                    if len(N) > 0 and self._nitrogen_protonate(N, p.Message()):
-                        pass  # been fixed.
-                    else:
-                        # triage rings should have altered any not ring atoms that are aromatic.
-                        # self._get_ring_info()
-                        # so it is likely a hetatom thing.
-                        self.log.info(f'Ring triages seems to have failed. Is it a valence thing?')
-                        valence_issues = [self._has_correct_valence(i) for i in p.GetAtomIndices()]
-                        if not all(valence_issues):
-                            for i in p.GetAtomIndices():
-                                self.fix_valence(i)
-                        else:
-                            self.log.warning(f'Attempting default valency (not max)')
-                            self._valence_mode = 'default'
-                            for i in p.GetAtomIndices():
-                                self.fix_valence(i)
-                            self._valence_mode = 'max'
+            # if p.Message() == _previous:  # the problem persists: downgrade to single
+            #     self.triage_rings()
+            # ---------------------------------------------------------
+            if p.GetType() == 'KekulizeException' and p.Message() != _previous:
+                N = self._get_nitrogens(p.GetAtomIndices())
+                if len(N) > 0 and self._nitrogen_protonate(N, p.Message()):
+                    pass  # been fixed.
                 else:
-                    for i in p.GetAtomIndices():
-                        if self.downgrade_substituents(self.rwmol.GetAtomWithIdx(i)):
-                            break
-                        self.downgrade_ring(self.rwmol.GetAtomWithIdx(i))
-                    self.triage_rings()
+                    # triage rings should have altered any not ring atoms that are aromatic.
+                    # self._get_ring_info()
+                    # so it is likely a hetatom thing.
+                    self.log.info(f'Ring triages seems to have failed. Is it a valence thing?')
+                    valence_issues = [self._has_correct_valence(i) for i in p.GetAtomIndices()]
+                    if not all(valence_issues):
+                        for i in p.GetAtomIndices():
+                            self.fix_valence(i)
+                    else:
+                        self.log.warning(f'Attempting default valency (not max)')
+                        self._valence_mode = 'default'
+                        for i in p.GetAtomIndices():
+                            self.fix_valence(i)
+                        self._valence_mode = 'max'
+            # ---------------------------------------------------------
+            elif p.GetType() == 'KekulizeException' and p.Message() == _previous:
+                for i in p.GetAtomIndices():
+                    if self.downgrade_substituents(self.rwmol.GetAtomWithIdx(i)):
+                        break
+                    self.downgrade_ring(self.rwmol.GetAtomWithIdx(i))
+                self.triage_rings()
             ############################################################
             elif p.GetType() == 'AtomKekulizeException' and 'non-ring atom' in p.Message():
                 atom = self.rwmol.GetAtomWithIdx(p.GetAtomIdx())
@@ -163,10 +163,10 @@ class _RectifierValence(_RectifierBase):
         valence = self._get_atom_valence(atom)
         if self._valence_mode == 'max':
             maxv = max(pt.GetValenceList(atom.GetAtomicNum()))
-            return valence - maxv
+            return int(valence - maxv)
         else:
             d = pt.GetDefaultValence(atom.GetAtomicNum())
-            return valence - d
+            return int(valence - d)
 
     def _has_correct_valence(self, atom: Union[Chem.Atom, int]):
         if isinstance(atom, Chem.Atom):
@@ -245,22 +245,25 @@ class _RectifierValence(_RectifierBase):
 
     # ========= Sanitization based fixes ===============================================================================
 
-    def _nitrogen_protonate(self, nitrogens, previous):
+    def _nitrogen_protonate(self, nitrogens: Sequence[int], previous: str):
         """
+        Add protons combinatorially.
+        Note Adding a positive charge to the nitrogen is not a protonation issue
+        ``_adjust_for_fix_valence`` will do it
+        based on ``self.valence_correction`` ('element' | 'charge')
 
         :param nitrogens: list of Nitrogens
         :param previous:
         :return:
         """
         def reset():
+            n: int
             for n in nitrogens:
                 self.rwmol.GetAtomWithIdx(n).SetNumExplicitHs(0)
 
-        reset()
-        p = Chem.DetectChemistryProblems(self.rwmol)
-        if len(p) == 0 or p[0].Message() != previous:
-            return True
-        for i in range(1, len(nitrogens)):
+        # add all combinations of protons from zero to all
+        for i in range(0, len(nitrogens)+1):
+            # itertools.combinations choose zero returns an empty tuple
             for c in itertools.combinations(nitrogens, i):
                 reset()
                 for n in c:
@@ -270,18 +273,29 @@ class _RectifierValence(_RectifierBase):
                     return True
         return False
 
-        self.log.debug(f'KekulizeException likely caused by nitrogen')
-
     # ========= other helpers ==========================================================================================
 
-    def _get_nitrogens(self, indices):
+    def _get_nitrogens(self, indices:List[int]) -> List[int]:
         """
         Called when ``KekulizeException`` happends during ``.fix_issues``
+        The curious case of 'c1ccn(C)cc1' - the N is not in the unkekulised list
 
         :param indices:
         :return:
         """
-        return [i for i in indices if self.rwmol.GetAtomWithIdx(i).GetSymbol() == 'N']
+        nitrogens: List[int] = [i for i, in self.rwmol.GetSubstructMatches(Chem.MolFromSmarts('[#7]'))]
+        rings_indices: Tuple[Tuple[int]] = self._get_ring_info(mode='atom')
+        naughty_nitrogens = set(nitrogens).intersection(indices)
+        for r_indices in rings_indices:
+            if set(nitrogens).isdisjoint(r_indices):
+                # no nitrogens in this ring
+                continue
+            if set(r_indices).isdisjoint(indices):
+                # no unkekulised atoms in this ring
+                continue
+            # there are nitrogens and unkekulised atoms in this ring
+            naughty_nitrogens.update(set(nitrogens).intersection(r_indices))
+        return list(naughty_nitrogens)
 
     # ========= shift/charge ===========================================================================================
 

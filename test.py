@@ -1,7 +1,8 @@
 import unittest, os
 from molecular_rectifier import Rectifier
-from rdkit import Chem, Geometry
+from rdkit import Chem, Geometry, RDLogger
 from rdkit.Chem import AllChem
+RDLogger.DisableLog('rdApp.*')
 
 class RectifierTester(unittest.TestCase):
     # name: [before, after]
@@ -128,6 +129,30 @@ M  END'''
         recto = Rectifier(mol)
         recto.fix()
         self.assertEqual('CC1CCC2(CCCC(C)C2)CC1', Chem.MolToSmiles(AllChem.RemoveHs(recto.mol)))
+
+    def test_unproto_indole(self):
+        correct = Chem.MolFromSmiles('c1ccc2[nH]ccc2c1')
+        mol = Chem.MolFromSmiles('c1ccc2nccc2c1', sanitize=False)
+        recto = Rectifier(mol)
+        self.assertIn(4, recto._get_nitrogens(Chem.DetectChemistryProblems(mol)[0].GetAtomIndices()))
+        # recto.log.setLevel(logging.DEBUG)
+        # recto.log.handlers[0].setLevel(logging.DEBUG)
+        recto.fix()
+        self.assertEqual(Chem.MolToInchi(correct), Chem.MolToInchi(recto.mol))
+
+    def test_methylpyridine(self):
+        # N-methylpyridine
+        correct = Chem.MolFromSmiles('c1cc[n+](C)cc1')
+        mol = Chem.MolFromSmiles('c1ccn(C)cc1', sanitize=False)
+        recto = Rectifier(mol)
+        recto.valence_correction = 'charge'  # element
+        recto.fix()
+        self.assertEqual(Chem.MolToInchi(correct), Chem.MolToInchi(recto.mol))
+        correct = Chem.MolFromSmiles('c1ccc(C)cc1')
+        recto = Rectifier(mol)
+        recto.valence_correction = 'element'
+        recto.fix()
+        self.assertEqual(Chem.MolToInchi(correct), Chem.MolToInchi(recto.mol))
 
 from functools import partial
 
