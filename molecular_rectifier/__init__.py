@@ -120,4 +120,5 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
             Chem.SanitizeMol(self.rwmol, catchErrors=False)
         except CaughtError as error:
             self.log.info(f'{error.__class__.__name__}: {error}')
+        self.blank_nan_positions()
         return self

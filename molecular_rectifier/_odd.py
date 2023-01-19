@@ -9,6 +9,7 @@ __doc__ = \
 ########################################################################################################################
 
 from rdkit import Chem
+from rdkit.Geometry import Point3D
 
 from ._base import _RectifierBase
 
@@ -51,3 +52,9 @@ class _RectifierOdd(_RectifierBase):
     def _prevent_overclose(self):
         pass
 
+    def blank_nan_positions(self):
+        conf: Chem.Conformer = self.rwmol.GetConformer()
+        for i in range(self.rwmol.GetNumAtoms()):
+            if str(conf.GetAtomPosition(i).x) == 'nan':
+                self.log.debug(f'nan atom position: {i} -> {conf.GetAtomPosition(i)}')
+                conf.SetAtomPosition(i, Point3D(i / 100, i / 100, i / 100))
