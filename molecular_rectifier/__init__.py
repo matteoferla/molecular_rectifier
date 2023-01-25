@@ -10,7 +10,7 @@ __author__ = "Matteo Ferla. [Github](https://github.com/matteoferla)"
 __email__ = "matteo.ferla@gmail.com"
 __date__ = "2021 A.D."
 __license__ = "MIT"
-__version__ = "0.1.10"
+__version__ = "0.1.10.2"
 __citation__ = "See Fragmenstein"
 
 ########################################################################################################################
@@ -110,6 +110,7 @@ class Rectifier(_RectifierOverclose, _RectifierRing, _RectifierOdd, _RectifierVa
                     for i in p.GetAtomIndices():
                         self.log.debug(f'KekulizeException downgrade_ring last resort: {i}')
                         self.downgrade_ring(self.rwmol.GetAtomWithIdx(i), hard=True)
+                        AllChem.AddHs(self.rwmol)
             self.fix(catchErrors=catchErrors, iteration=iteration)
         else:
             pass # burn...
