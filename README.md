@@ -39,6 +39,8 @@ The attribute `valence_correction` controls how the valence is fixed up
 * preventing 3- and 4- membered rings fused to another ring
 * preventing allene
 
+For more see (rules note)[rules.md].
+
 ## Rationale
 
 This is used by [Fragmenstein](https://github.com/matteoferla/Fragmenstein) in the automatic merging mode (`combine`).

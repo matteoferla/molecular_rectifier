@@ -4,6 +4,22 @@ from rdkit import Chem, Geometry, RDLogger
 from rdkit.Chem import AllChem
 RDLogger.DisableLog('rdApp.*')
 
+import requests
+from urllib.parse import quote
+
+def name2mol(name) -> Chem.Mol:
+    """
+    Using Cactus get a molecule from a name
+    """
+    response: requests.Response = requests.get(
+        f'https://cactus.nci.nih.gov/chemical/structure/{quote(name)}/smiles')
+    response.raise_for_status()
+    smiles: str = response.text
+    mol: Chem.Mol = Chem.MolFromSmiles(smiles)
+    mol.SetProp('_Name', name)
+    AllChem.EmbedMolecule(mol)
+    return mol
+
 class RectifierTester(unittest.TestCase):
     # name: [before, after]
     chemdex = {'phenylnaphthalene': ('c1ccc2ccccc2c1(c3ccccc3)', 'c1ccc(-c2cccc3ccccc23)cc1'),
