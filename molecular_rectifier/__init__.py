@@ -10,7 +10,7 @@ __author__ = "Matteo Ferla. [Github](https://github.com/matteoferla)"
 __email__ = "matteo.ferla@gmail.com"
 __date__ = "2021 A.D."
 __license__ = "MIT"
-__version__ = "0.1.10.2"
+__version__ = "1.0.0"
 __citation__ = "See Fragmenstein"
 
 ########################################################################################################################

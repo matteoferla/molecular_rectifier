@@ -18,7 +18,7 @@ descr = __doc__.split('\n')[1] # non-title line.
 
 setup(
     name='molecular_rectifier',
-    version='0.1.10.2',
+    version='1.0.0',
     python_requires='>3.6',
     packages=find_packages(),
     install_requires=['rdkit'],
